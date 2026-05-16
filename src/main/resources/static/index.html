@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root cause Analyzer AI agent - Editor Terminal</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-[#1E1E1E] text-[#D4D4D4] font-mono h-screen flex flex-col antialiased">
+
+    <header class="bg-[#252526] border-b border-[#3C3C3C] px-4 py-2.5 flex items-center justify-between select-none shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="flex gap-1.5">
+                <div class="h-3 w-3 rounded-full bg-[#FF5F56]"></div>
+                <div class="h-3 w-3 rounded-full bg-[#FFBD2E]"></div>
+                <div class="h-3 w-3 rounded-full bg-[#27C93F]"></div>
+            </div>
+            <span class="text-xs text-[#858585] border-l border-[#3C3C3C] pl-3 font-sans tracking-wide">root-cause-analyzer-v2.0.log</span>
+        </div>
+        <div class="text-xs font-sans font-semibold text-[#9CDCFE] tracking-tight">
+            Root cause Analyzer AI agent
+        </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-6 max-w-4xl w-full mx-auto flex flex-col gap-6 custom-scrollbar">
+        <div id="outputContainer" class="flex flex-col gap-6">
+            
+            <div class="flex gap-4 max-w-[90%]">
+                <div class="text-xs text-[#6A9955] leading-relaxed select-none font-mono pt-1">01</div>
+                <div class="bg-[#252526] border border-[#3C3C3C] p-4 rounded-lg text-sm font-sans leading-relaxed text-[#CE9178] shadow-md w-full">
+                    <span class="text-[#569CD6] font-mono font-bold block mb-1">Welcome</span>
+                    Paste telemetry logs into the terminal shell input below, or drop a local context document using the upload option to evaluate real-time incident root causes.
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer class="bg-[#252526] border-t border-[#3C3C3C] p-4 sticky bottom-0 shadow-2xl">
+        <div class="max-w-4xl w-full mx-auto flex flex-col gap-3">
+            
+            <div class="flex items-center justify-between px-1">
+                <label class="cursor-pointer bg-[#2D2D2D] hover:bg-[#3E3E3E] text-[#D4D4D4] hover:text-white text-xs font-sans font-medium px-3.5 py-1.5 rounded border border-[#3C3C3C] transition flex items-center gap-2">
+                    <span class="text-[#9CDCFE]">📎 Upload Log File (.txt, .log)</span>
+                    <input type="file" id="fileAttachment" accept=".txt,.log" class="hidden" onchange="handleFileUpload(event)">
+                </label>
+                <span id="fileNotice" class="text-xs text-[#CE9178] font-mono italic"></span>
+            </div>
+
+            <div class="flex gap-3 items-end bg-[#1E1E1E] border border-[#3C3C3C] rounded p-2 focus-within:border-[#007ACC] transition">
+                <textarea id="logPayloadInput" rows="4" class="flex-1 bg-transparent border-none resize-none focus:outline-none p-2 text-sm text-[#9CDCFE] placeholder-[#5A5A5A] custom-scrollbar font-mono leading-relaxed" placeholder="~$ Paste runtime stack trace logs or metrics stream data here..."></textarea>
+                <button onclick="executeAnalysis()" class="bg-[#007ACC] hover:bg-[#118ADF] text-white font-sans text-xs font-semibold h-9 px-5 rounded transition shrink-0 flex items-center justify-center shadow">
+                    Run Diagnostics
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const TARGET_ENDPOINT = "http://localhost:8080/api/v1/incidents/analyze";
+        const outputContainer = document.getElementById('outputContainer');
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const noticeSpan = document.getElementById('fileNotice');
+            noticeSpan.innerText = `[IO] Mounted: ${file.name}`;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('logPayloadInput').value = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+
+        async function executeAnalysis() {
+            const textarea = document.getElementById('logPayloadInput');
+            const userPayload = textarea.value.trim();
+            if (!userPayload) return;
+
+            document.getElementById('fileNotice').innerText = "";
+            document.getElementById('fileAttachment').value = "";
+
+            // Render User Output styled as an ingested code module
+            outputContainer.innerHTML += `
+                <div class="flex gap-4 max-w-[95%] self-end flex-row-reverse w-full">
+                    <div class="text-xs text-[#858585] select-none pt-1">IN</div>
+                    <div class="bg-[#1E1E1E] border border-[#3C3C3C] p-4 rounded text-xs font-mono text-[#4FC1FF] shadow-sm max-w-[85%] overflow-x-auto w-full leading-relaxed border-l-2 border-l-[#4FC1FF]">
+                        ${escapeHtml(userPayload)}
+                    </div>
+                </div>
+            `;
+            textarea.value = '';
+            outputContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+            const currentLoaderId = 'analyzer-load-' + Date.now();
+            outputContainer.innerHTML += `
+                <div id="${currentLoaderId}" class="flex gap-4 max-w-[85%] animate-pulse">
+                    <div class="text-xs text-[#858585] select-none pt-1">SYS</div>
+                    <div class="bg-[#252526] border border-[#3C3C3C] p-3 rounded text-xs text-[#DCDCAA] flex items-center gap-2">
+                        <svg class="animate-spin h-3.5 w-3.5 text-[#007ACC]" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        [Thread-1] Parsing telemetry strings & calling RAG vector spaces...
+                    </div>
+                </div>
+            `;
+
+            try {
+                const callResponse = await fetch(TARGET_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: userPayload
+                });
+
+                if (!callResponse.ok) throw new Error("Diagnostic execution exception.");
+                const summaryData = await callResponse.json();
+
+                document.getElementById(currentLoaderId).remove();
+
+                // Append parsed JSON object keys rendered into standard editor text formats
+                outputContainer.innerHTML += `
+                    <div class="flex gap-4 max-w-[95%] w-full">
+                        <div class="text-xs text-[#858585] select-none pt-1">OUT</div>
+                        <div class="bg-[#252526] border border-[#3C3C3C] p-5 rounded text-sm leading-relaxed text-[#D4D4D4] shadow-md w-full flex flex-col gap-5 border-l-2 border-l-[#007ACC] font-sans">
+                            <div>
+                                <span class="text-xs font-mono font-bold uppercase tracking-wider text-[#F44747] block mb-1">● Root Cause Identified</span>
+                                <div class="text-[#E5C07B] pl-1 text-sm font-medium leading-relaxed">${marked.parse(summaryData.rootCause)}</div>
+                            </div>
+                            <div class="border-t border-[#3C3C3C] pt-4">
+                                <span class="text-xs font-mono font-bold uppercase tracking-wider text-[#6A9955] block mb-1">● Recommended Remediation Actions</span>
+                                <div class="text-[#9CDCFE] pl-1 text-sm leading-relaxed">${marked.parse(summaryData.recommendedActions)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (exception) {
+                document.getElementById(currentLoaderId).remove();
+                outputContainer.innerHTML += `
+                    <div class="bg-[#2D2D2D] border border-[#F44747] p-4 rounded max-w-[85%] text-[#F44747] text-xs font-mono">
+                        [FATAL ER] Runtime Diagnostic Fault: ${exception.message}
+                    </div>
+                `;
+            }
+            
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>
